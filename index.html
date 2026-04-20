@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>☕ 云端咖啡记账本</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Supabase JS 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { background-color: #f8f9fa; padding-bottom: 80px; }
+        .header { background-color: #6f4e37; color: white; padding: 15px; text-align: center; margin-bottom: 20px; border-radius: 0 0 15px 15px; }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 12px; }
+        .btn-custom { border-radius: 10px; font-weight: bold; }
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; }
+        .nav-item { text-align: center; font-size: 0.8rem; color: #666; cursor: pointer; flex: 1; }
+        .nav-item.active { color: #6f4e37; font-weight: bold; }
+        .nav-icon { font-size: 1.2rem; display: block; margin-bottom: 2px; }
+        .section-view { display: none; }
+        .section-view.active { display: block; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; justify-content: center; align-items: center; }
+    </style>
+</head>
+<body>
+
+    <!-- 加载动画 -->
+    <div id="loading" class="loading-overlay"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>
+
+    <div class="header"><h4>☕ 云端咖啡记账本</h4></div>
+
+    <div class="container">
+        <!-- 1. 家庭咖啡支出 -->
+        <div id="view-home" class="section-view active">
+            <div class="card p-3">
+                <h5 class="card-title text-center mb-3">🏠 家庭咖啡支出</h5>
+                <form id="form-home">
+                    <div class="mb-3">
+                        <label class="form-label">购买项目</label>
+                        <select class="form-select" id="home-type" required>
+                            <option value="咖啡豆">咖啡豆</option>
+                            <option value="牛奶">牛奶</option>
+                            <option value="耗材">耗材</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">金额 (¥)</label>
+                        <input type="number" class="form-control" id="home-amount" step="0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">日期</label>
+                        <input type="date" class="form-control" id="home-date" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 btn-custom">记一笔</button>
+                </form>
+            </div>
+            <div class="card p-3">
+                <h6>最近记录</h6>
+                <ul id="list-home" class="list-group list-group-flush"></ul>
+            </div>
+        </div>
+
+        <!-- 2. 日常咖啡支出 -->
+        <div id="view-daily" class="section-view">
+            <div class="card p-3">
+                <h5 class="card-title text-center mb-3">🥤 日常连锁咖啡</h5>
+                <form id="form-daily">
+                    <div class="mb-3">
+                        <label class="form-label">店铺/品牌</label>
+                        <input type="text" class="form-control" id="daily-shop" placeholder="如：星巴克" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">金额 (¥)</label>
+                        <input type="number" class="form-control" id="daily-amount" step="0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">日期</label>
+                        <input type="date" class="form-control" id="daily-date" required>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100 btn-custom text-white">记一笔</button>
+                </form>
+            </div>
+            <div class="card p-3">
+                <h6>最近记录</h6>
+                <ul id="list-daily" class="list-group list-group-flush"></ul>
+            </div>
+        </div>
+
+        <!-- 3. 探店咖啡支出 -->
+        <div id="view-explore" class="section-view">
+            <div class="card p-3">
+                <h5 class="card-title text-center mb-3">✈️ 探店咖啡支出</h5>
+                <form id="form-explore">
+                    <div class="mb-3">
+                        <label class="form-label">城市</label>
+                        <input type="text" class="form-control" id="explore-city" placeholder="如：上海" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">店名</label>
+                        <input type="text" class="form-control" id="explore-shop" placeholder="如：Manner" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">金额 (¥)</label>
+                        <input type="number" class="form-control" id="explore-amount" step="0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">日期</label>
+                        <input type="date" class="form-control" id="explore-date" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 btn-custom">记一笔</button>
+                </form>
+            </div>
+            <div class="card p-3">
+                <h6>最近记录</h6>
+                <ul id="list-explore" class="list-group list-group-flush"></ul>
+            </div>
+        </div>
+
+        <!-- 4. 数据统计 -->
+        <div id="view-stats" class="section-view">
+            <div class="d-grid gap-3">
+                <div class="card p-3">
+                    <h5 class="text-center">📊 家庭支出占比</h5>
+                    <canvas id="chart-home"></canvas>
+                    <div id="stat-home-total" class="text-center mt-2 fw-bold"></div>
+                </div>
+                <div class="card p-3">
+                    <h5 class="text-center">📅 日常每月分布</h5>
+                    <canvas id="chart-daily"></canvas>
+                    <div id="stat-daily-total" class="text-center mt-2 fw-bold"></div>
+                </div>
+                <div class="card p-3">
+                    <h5 class="text-center">🌍 探店城市分布</h5>
+                    <canvas id="chart-explore-city"></canvas>
+                    <div id="stat-explore-total" class="text-center mt-2 fw-bold"></div>
+                    <h5 class="text-center mt-4">📅 探店每月分布</h5>
+                    <canvas id="chart-explore-month"></canvas>
+                </div>
+            </div>
+            <button class="btn btn-outline-danger btn-sm mb-5" onclick="alert('数据存储在云端，如需清空请联系开发者或在 Supabase 后台操作')">清空数据说明</button>
+        </div>
+    </div>
+
+    <!-- 底部导航栏 -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('home', this)"><span class="nav-icon">🏠</span>家庭</div>
+        <div class="nav-item" onclick="switchTab('daily', this)"><span class="nav-icon">🥤</span>日常</div>
+        <div class="nav-item" onclick="switchTab('explore', this)"><span class="nav-icon">✈️</span>探店</div>
+        <div class="nav-item" onclick="switchTab('stats', this)"><span class="nav-icon">📊</span>统计</div>
+    </div>
+
+    <!-- 引入 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // ================= 配置区域 =================
+        // ⚠️ 已填入你的 Project URL
+        const SUPABASE_URL = 'https://vwrflrdfiengymrdhcap.supabase.co';
+        
+        // ⚠️ ⚠️ ⚠️ 核心修复：已填入你的 API Key ⚠️ ⚠️ ⚠️
+        // 这就是刚才你提供的那一长串字符，现在它生效了
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3cmZscmRmaWVuZ3ltcmRoY2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NzQ0MDYsImV4cCI6MjA5MjI1MDQwNn0.auVTDC2GrQOG8cK70oi6T0S5Z3Zzoj7Zb8UsDTJAXwM';
+        
+        // 初始化 Supabase 客户端
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // ===========================================
+
+        let allData = { home: [], daily: [], explore: [] };
+        let charts = {};
+
+        // --- 1. 核心数据逻辑 (云端版) ---
+
+        // 从云端获取数据
+        async function fetchData() {
+            document.getElementById('loading').style.display = 'flex'; // 显示加载动画
+            
+            const { data, error } = await supabase
+                .from('coffee_records')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                alert('数据加载失败，请检查控制台或网络连接');
+                console.error(error);
+            } else {
+                // 数据分类
+                allData.home = data.filter(item => item.category === 'home');
+                allData.daily = data.filter(item => item.category === 'daily');
+                allData.explore = data.filter(item => item.category === 'explore');
+                
+                renderLists();
+            }
+            document.getElementById('loading').style.display = 'none'; // 隐藏加载动画
+        }
+
+        // 向云端添加数据
+        async function addRecord(category, type, amount, date) {
+            document.getElementById('loading').style.display = 'flex';
+
+            const { data, error } = await supabase
+                .from('coffee_records')
+                .insert([{ category: category, type: type, amount: amount, date: date }]);
+
+            if (error) {
+                alert('保存失败');
+                console.error(error);
+            } else {
+                // 成功后重新拉取数据，保证多设备同步
+                await fetchData(); 
+            }
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // --- 2. 页面交互逻辑 ---
+
+        function switchTab(viewId, navElement) {
+            document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + viewId).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            navElement.classList.add('active');
+
+            if (viewId === 'stats') {
+                renderCharts();
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.querySelectorAll('input[type="date"]').forEach(input => input.value = today);
+            fetchData(); // 从云端加载数据
+        });
+
+        // --- 3. 表单提交处理 ---
+
+        document.getElementById('form-home').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const type = document.getElementById('home-type').value;
+            const amount = parseFloat(document.getElementById('home-amount').value);
+            const date = document.getElementById('home-date').value;
+            addRecord('home', type, amount, date);
+            e.target.reset();
+            document.getElementById('home-date').value = todayStr();
+        });
+
+        document.getElementById('form-daily').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const shop = document.getElementById('daily-shop').value;
+            const amount = parseFloat(document.getElementById('daily-amount').value);
+            const date = document.getElementById('daily-date').value;
+            addRecord('daily', shop, amount, date);
+            e.target.reset();
+            document.getElementById('daily-date').value = todayStr();
+        });
+
+        document.getElementById('form-explore').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const city = document.getElementById('explore-city').value;
+            const shop = document.getElementById('explore-shop').value;
+            const amount = parseFloat(document.getElementById('explore-amount').value);
+            const date = document.getElementById('explore-date').value;
+            // 这里我们把城市和店名拼在一起存入 type 字段
+            addRecord('explore', `${city} - ${shop}`, amount, date);
+            e.target.reset();
+            document.getElementById('explore-date').value = todayStr();
+        });
+
+        function todayStr() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        // --- 4. 渲染列表 ---
+        function renderLists() {
+            // 家庭
+            const listHome = document.getElementById('list-home');
+            listHome.innerHTML = allData.home.map(item => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>${item.type}</span>
+                    <span class="badge bg-primary rounded-pill">¥${item.amount}</span>
+                </li>
+            `).join('');
+
+            // 日常
+            const listDaily = document.getElementById('list-daily');
+            listDaily.innerHTML = allData.daily.map(item => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>${item.type}</span>
+                    <span class="badge bg-warning text-dark rounded-pill">¥${item.amount}</span>
+                </li>
+            `).join('');
+
+            // 探店
+            const listExplore = document.getElementById('list-explore');
+            listExplore.innerHTML = allData.explore.map(item => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>${item.type}</span>
+                    <span class="badge bg-success rounded-pill">¥${item.amount}</span>
+                </li>
+            `).join('');
+        }
+
+        // --- 5. 图表渲染逻辑 ---
+        function renderCharts() {
+            // 家庭支出饼图
+            if (charts.homeChart) charts.homeChart.destroy();
+            const homeCtx = document.getElementById('chart-home').getContext('2d');
+            const homeTypes = [...new Set(allData.home.map(i => i.type))];
+            const homeAmounts = homeTypes.map(type => 
+                allData.home.filter(i => i.type === type).reduce((a, b) => a + b.amount, 0)
+            );
+            charts.homeChart = new Chart(homeCtx, {
+                type: 'pie',
+                data: {
+                    labels: homeTypes,
+                    datasets: [{
+                        data: homeAmounts,
+                        backgroundColor: ['#6f4e37', '#8B4513', '#DEB887']
+                    }]
+                }
+            });
+            document.getElementById('stat-home-total').textContent = `总计: ¥${allData.home.reduce((a, b) => a + b.amount, 0)}`;
+
+            // 日常支出折线图
+            if (charts.dailyChart) charts.dailyChart.destroy();
+            const dailyCtx = document.getElementById('chart-daily').getContext('2d');
+            const dailyDates = [...new Set(allData.daily.map(i => i.date.slice(0, 7)))].sort();
+            const dailyAmounts = dailyDates.map(date => 
+                allData.daily.filter(i => i.date.startsWith(date)).reduce((a, b) => a + b.amount, 0)
+            );
+            charts.dailyChart = new Chart(dailyCtx, {
+                type: 'line',
+                data: {
+                    labels: dailyDates,
+                    datasets: [{
+                        label: '金额 (¥)',
+                        data: dailyAmounts,
+                        borderColor: '#D4A017',
+                        fill: false
+                    }]
+                }
+            });
+            document.getElementById('stat-daily-total').textContent = `总计: ¥${allData.daily.reduce((a, b) => a + b.amount, 0)}`;
+
+            // 探店城市柱状图
+            if (charts.exploreCityChart) charts.exploreCityChart.destroy();
+            const exploreCityCtx = document.getElementById('chart-explore-city').getContext('2d');
+            const exploreCities = [...new Set(allData.explore.map(i => i.type.split(' - ')[0]))];
+            const exploreCityAmounts = exploreCities.map(city => 
+                allData.explore.filter(i => i.type.startsWith(city)).reduce((a, b) => a + b.amount, 0)
+            );
+            charts.exploreCityChart = new Chart(exploreCityCtx, {
+                type: 'bar',
+                data: {
+                    labels: exploreCities,
+                    datasets: [{
+                        label: '金额 (¥)',
+                        data: exploreCityAmounts,
+                        backgroundColor: '#2E8B57'
+                    }]
+                }
+            });
+            document.getElementById('stat-explore-total').textContent = `总计: ¥${allData.explore.reduce((a, b) => a + b.amount, 0)}`;
+
+            // 探店月份折线图
+            if (charts.exploreMonthChart) charts.exploreMonthChart.destroy();
+            const exploreMonthCtx = document.getElementById('chart-explore-month').getContext('2d');
+            const exploreMonths = [...new Set(allData.explore.map(i => i.date.slice(0, 7)))].sort();
+            const exploreMonthAmounts = exploreMonths.map(date => 
+                allData.explore.filter(i => i.date.startsWith(date)).reduce((a, b) => a + b.amount, 0)
+            );
+            charts.exploreMonthChart = new Chart(exploreMonthCtx, {
+                type: 'line',
+                data: {
+                    labels: exploreMonths,
+                    datasets: [{
+                        label: '金额 (¥)',
+                        data: exploreMonthAmounts,
+                        borderColor: '#1E90FF',
+                        fill: false
+                    }]
+                }
+            });
+        }
+    </script>
+</body>
+</html>
