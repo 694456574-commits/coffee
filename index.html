@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>☕ 我的咖啡记账本</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { background-color: #f8f9fa; padding-bottom: 80px; }
+        .header { background-color: #6f4e37; color: white; padding: 15px; text-align: center; margin-bottom: 20px; border-radius: 0 0 15px 15px; }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 12px; }
+        .btn-custom { border-radius: 10px; font-weight: bold; }
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; }
+        .nav-item { text-align: center; font-size: 0.8rem; color: #666; cursor: pointer; flex: 1; }
+        .nav-item.active { color: #6f4e37; font-weight: bold; }
+        .nav-icon { font-size: 1.2rem; display: block; margin-bottom: 2px; }
+        .section-view { display: none; }
+        .section-view.active { display: block; }
+        .delete-btn { cursor: pointer; color: #dc3545; font-size: 1.2rem; padding: 0 10px; }
+    </style>
+</head>
+<body>
+    <div class="header"><h4>☕ 咖啡记账本</h4></div>
+    <div class="container">
+        <!-- 1. 家庭 -->
+        <div id="view-home" class="section-view active">
+            <div class="card p-3">
+                <h5 class="card-title text-center mb-3">🏠 家庭咖啡支出</h5>
+                <form id="form-home">
+                    <div class="mb-3">
+                        <label class="form-label">购买项目</label>
+                        <select class="form-select" id="home-type" required>
+                            <option value="咖啡豆">咖啡豆</option>
+                            <option value="牛奶">牛奶</option>
+                            <option value="耗材">耗材</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">金额 (¥)</label>
+                        <input type="number" class="form-control" id="home-amount" step="0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">日期</label>
+                        <input type="date" class="form-control" id="home-date" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 btn-custom">记一笔</button>
+                </form>
+            </div>
+            <div class="card p-3"><h6>最近记录</h6><ul id="list-home" class="list-group list-group-flush"></ul></div>
+        </div>
+
+        <!-- 2. 日常 -->
+        <div id="view-daily" class="section-view">
+            <div class="card p-3">
+                <h5 class="card-title text-center mb-3">🥤 日常连锁咖啡</h5>
+                <form id="form-daily">
+                    <div class="mb-3"><label class="form-label">店铺/品牌</label><input type="text" class="form-control" id="daily-shop" required></div>
+                    <div class="mb-3"><label class="form-label">金额 (¥)</label><input type="number" class="form-control" id="daily-amount" step="0.1" required></div>
+                    <div class="mb-3"><label class="form-label">日期</label><input type="date" class="form-control" id="daily-date" required></div>
+                    <button type="submit" class="btn btn-warning w-100 btn-custom text-white">记一笔</button>
+                </form>
+            </div>
+            <div class="card p-3"><h6>最近记录</h6><ul id="list-daily" class="list-group list-group-flush"></ul></div>
+        </div>
+
+        <!-- 3. 探店 -->
+        <div id="view-explore" class="section-view">
+            <div class="card p-3">
+                <h5 class="card-title text-center mb-3">✈️ 探店咖啡支出</h5>
+                <form id="form-explore">
+                    <div class="mb-3"><label class="form-label">城市</label><input type="text" class="form-control" id="explore-city" required></div>
+                    <div class="mb-3"><label class="form-label">店名</label><input type="text" class="form-control" id="explore-shop" required></div>
+                    <div class="mb-3"><label class="form-label">金额 (¥)</label><input type="number" class="form-control" id="explore-amount" step="0.1" required></div>
+                    <div class="mb-3"><label class="form-label">日期</label><input type="date" class="form-control" id="explore-date" required></div>
+                    <button type="submit" class="btn btn-success w-100 btn-custom">记一笔</button>
+                </form>
+            </div>
+            <div class="card p-3"><h6>最近记录</h6><ul id="list-explore" class="list-group list-group-flush"></ul></div>
+        </div>
+
+        <!-- 4. 统计 -->
+        <div id="view-stats" class="section-view">
+            <div class="card p-3"><h5 class="text-center">📊 家庭支出占比</h5><canvas id="chart-home"></canvas><div id="stat-home-total" class="text-center mt-2 fw-bold"></div></div>
+            <div class="card p-3"><h5 class="text-center">📅 日常每月分布</h5><canvas id="chart-daily"></canvas><div id="stat-daily-total" class="text-center mt-2 fw-bold"></div></div>
+            <div class="card p-3"><h5 class="text-center">🌍 探店城市分布</h5><canvas id="chart-explore-city"></canvas><div id="stat-explore-total" class="text-center mt-2 fw-bold"></div></div>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('home', this)"><span class="nav-icon">🏠</span> 家庭</div>
+        <div class="nav-item" onclick="switchTab('daily', this)"><span class="nav-icon">🥤</span> 日常</div>
+        <div class="nav-item" onclick="switchTab('explore', this)"><span class="nav-icon">✈️</span> 探店</div>
+        <div class="nav-item" onclick="switchTab('stats', this)"><span class="nav-icon">📊</span> 统计</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const SUPABASE_URL = 'https://vwrflrdfiengymrdhcap.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3cmZscmRmaWVuZ3ltcmRoY2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NzQ0MDYsImV4cCI6MjA5MjI1MDQwNn0.auVTDC2GrQOG8cK70oi6T0S5Z3Zzoj7Zb8UsDTJAXwM';
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let appData = { home: [], daily: [], explore: [] };
+        let charts = {};
+
+        // 加载数据
+        async function loadData() {
+            const [homeRes, dailyRes, exploreRes] = await Promise.all([
+                supabaseClient.from('home_coffee').select('*').order('id', { ascending: false }),
+                supabaseClient.from('daily_coffee').select('*').order('id', { ascending: false }),
+                supabaseClient.from('explore_coffee').select('*').order('id', { ascending: false })
+            ]);
+            
+            // 错误检查
+            if(homeRes.error) console.error('家庭表错误:', homeRes.error);
+            if(dailyRes.error) console.error('日常表错误:', dailyRes.error);
+            if(exploreRes.error) console.error('探店表错误:', exploreRes.error);
+
+            appData.home = homeRes.data || [];
+            appData.daily = dailyRes.data || [];
+            appData.explore = exploreRes.data || [];
+
+            renderLists();
+            if (document.getElementById('view-stats').classList.contains('active')) renderCharts();
+        }
+
+        // 保存数据 (已修正：去除了手动 ID)
+        async function saveData(newRecord, table) {
+            const { data, error } = await supabaseClient.from(table).insert([newRecord]);
+            if (error) {
+                alert('保存失败: ' + error.message); // 显示具体错误信息
+                console.error('详细错误:', error);
+            } else {
+                loadData();
+            }
+        }
+
+        // 删除数据
+        async function deleteData(id, table) {
+            if(!confirm('确定删除？')) return;
+            const { error } = await supabaseClient.from(table).delete().eq('id', id);
+            if (error) alert('删除失败');
+            else loadData();
+        }
+
+        // 页面加载
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.querySelectorAll('input[type="date"]').forEach(input => input.value = today);
+            loadData();
+        });
+
+        // 表单提交 - 家庭
+        document.getElementById('form-home').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const item = {
+                // 注意：这里不再发送 id，让数据库自动生成
+                type: document.getElementById('home-type').value,
+                amount: parseFloat(document.getElementById('home-amount').value),
+                date: document.getElementById('home-date').value
+            };
+            saveData(item, 'home_coffee');
+            e.target.reset();
+            document.getElementById('home-date').value = new Date().toISOString().split('T')[0];
+        });
+
+        // 表单提交 - 日常
+        document.getElementById('form-daily').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const item = {
+                shop: document.getElementById('daily-shop').value,
+                amount: parseFloat(document.getElementById('daily-amount').value),
+                date: document.getElementById('daily-date').value
+            };
+            saveData(item, 'daily_coffee');
+            e.target.reset();
+            document.getElementById('daily-date').value = new Date().toISOString().split('T')[0];
+        });
+
+        // 表单提交 - 探店
+        document.getElementById('form-explore').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const item = {
+                city: document.getElementById('explore-city').value,
+                shop: document.getElementById('explore-shop').value,
+                amount: parseFloat(document.getElementById('explore-amount').value),
+                date: document.getElementById('explore-date').value
+            };
+            saveData(item, 'explore_coffee');
+            e.target.reset();
+            document.getElementById('explore-date').value = new Date().toISOString().split('T')[0];
+        });
+
+        // 渲染列表
+        function renderLists() {
+            document.getElementById('list-home').innerHTML = appData.home.slice(0, 10).map(item => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div><span class="badge bg-secondary me-2">${item.type}</span><small class="text-muted">${item.date}</small></div>
+                    <div class="d-flex align-items-center"><span class="fw-bold me-3">¥${item.amount}</span><span class="delete-btn" onclick="deleteData('${item.id}', 'home_coffee')">🗑️</span></div>
+                </li>`).join('');
+
+            document.getElementById('list-daily').innerHTML = appData.daily.slice(0, 10).map(item => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div><span class="badge bg-warning text-dark me-2">${item.shop}</span><small class="text-muted">${item.date}</small></div>
+                    <div class="d-flex align-items-center"><span class="fw-bold me-3">¥${item.amount}</span><span class="delete-btn" onclick="deleteData('${item.id}', 'daily_coffee')">🗑️</span></div>
+                </li>`).join('');
+
+            document.getElementById('list-explore').innerHTML = appData.explore.slice(0, 10).map(item => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div><span class="badge bg-success me-2">${item.city}</span><small class="text-muted">${item.date} ${item.shop}</small></div>
+                    <div class="d-flex align-items-center"><span class="fw-bold me-3">¥${item.amount}</span><span class="delete-btn" onclick="deleteData('${item.id}', 'explore_coffee')">🗑️</span></div>
+                </li>`).join('');
+        }
+
+        // 图表渲染
+        function renderCharts() {
+            Object.values(charts).forEach(chart => chart.destroy());
+            
+            // 家庭
+            const homeTotal = appData.home.reduce((sum, item) => sum + item.amount, 0);
+            document.getElementById('stat-home-total').innerText = `总支出: ¥${homeTotal}`;
+            const homeStats = { '咖啡豆': 0, '牛奶': 0, '耗材': 0 };
+            appData.home.forEach(item => homeStats[item.type] += item.amount);
+            charts.home = new Chart(document.getElementById('chart-home').getContext('2d'), {
+                type: 'pie', data: { labels: Object.keys(homeStats), datasets: [{ data: Object.values(homeStats), backgroundColor: ['#6f4e37', '#fff0f5', '#d3d3d3'] }] }
+            });
+
+            // 日常
+            const dailyTotal = appData.daily.reduce((sum, item) => sum + item.amount, 0);
+            document.getElementById('stat-daily-total').innerText = `总支出: ¥${dailyTotal}`;
+            const monthlyStats = {};
+            appData.daily.forEach(item => { monthlyStats[item.date.substring(0, 7)] = (monthlyStats[item.date.substring(0, 7)] || 0) + item.amount; });
+            const sortedMonths = Object.keys(monthlyStats).sort();
+            charts.daily = new Chart(document.getElementById('chart-daily').getContext('2d'), {
+                type: 'bar', data: { labels: sortedMonths, datasets: [{ label: '每月支出', data: sortedMonths.map(m => monthlyStats[m]), backgroundColor: '#ffc107' }] }
+            });
+
+            // 探店
+            const exploreTotal = appData.explore.reduce((sum, item) => sum + item.amount, 0);
+            document.getElementById('stat-explore-total').innerText = `总支出: ¥${exploreTotal}`;
+            const cityStats = {};
+            appData.explore.forEach(item => { cityStats[item.city] = (cityStats[item.city] || 0) + item.amount; });
+            charts.exploreCity = new Chart(document.getElementById('chart-explore-city').getContext('2d'), {
+                type: 'doughnut', data: { labels: Object.keys(cityStats), datasets: [{ data: Object.values(cityStats), backgroundColor: ['#198754', '#0d6efd', '#dc3545'] }] }
+            });
+        }
+
+        function switchTab(viewId, navElement) {
+            document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + viewId).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            navElement.classList.add('active');
+            if (viewId === 'stats') renderCharts();
+        }
+    </script>
+</body>
+</html>
