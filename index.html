@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>☕ 云端咖啡记账本</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Supabase JS 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { background-color: #f8f9fa; padding-bottom: 80px; }
+        .header { background-color: #6f4e37; color: white; padding: 15px; text-align: center; margin-bottom: 20px; border-radius: 0 0 15px 15px; }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 12px; }
+        .btn-custom { border-radius: 10px; font-weight: bold; }
+        .loading-spinner { text-align: center; padding: 20px; color: #6f4e37; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h3>☕ 咖啡记账本</h3>
+    </div>
+
+    <div class="container">
+        <!-- 输入区域 -->
+        <div class="card p-3">
+            <div class="mb-3">
+                <label for="shopName" class="form-label">☕ 店名</label>
+                <input type="text" class="form-control" id="shopName" placeholder="例如：星巴克">
+            </div>
+            <div class="mb-3">
+                <label for="price" class="form-label">💰 价格</label>
+                <input type="number" class="form-control" id="price" placeholder="例如：35">
+            </div>
+            <button class="btn btn-custom w-100 text-white" style="background-color: #6f4e37;" onclick="addRecord()">记录这一杯</button>
+        </div>
+
+        <!-- 状态提示 -->
+        <div id="statusMessage" class="text-center text-muted small"></div>
+
+        <!-- 列表区域 -->
+        <div id="coffeeList">
+            <div class="loading-spinner">
+                <div class="spinner-border spinner-border-sm" role="status"></div> 正在加载云端数据...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 配置区域 (已预填) ---
+        const SUPABASE_URL = 'https://vwrflrdfiengymrdhcap.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3cmZscmRmaWVuZ3ltcmRoY2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NzQ0MDYsImV4cCI6MjA5MjI1MDQwNn0.auVTDC2GrQOG8cK70oi6T0S5Z3Zzoj7Zb8UsDTJAXwM';
+
+        // --- 初始化 Supabase ---
+        // 注意：这里使用 const 定义一次，避免重复定义报错
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- 核心功能逻辑 ---
+
+        // 1. 加载数据
+        async function loadRecords() {
+            const listEl = document.getElementById('coffeeList');
+            const statusEl = document.getElementById('statusMessage');
+
+            try {
+                // 从数据库读取数据
+                let { data, error } = await supabaseClient
+                    .from('coffee_records')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                // 渲染列表
+                listEl.innerHTML = '';
+                if (data.length === 0) {
+                    listEl.innerHTML = '<p class="text-center text-muted mt-3">暂无记录，快去喝一杯吧！</p>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const date = new Date(item.created_at).toLocaleDateString();
+                    const html = `
+                        <div class="card p-3 fade-in">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1">${item.shop_name}</h5>
+                                    <small class="text-muted">📅 ${date}</small>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-warning text-dark fs-6">¥${item.price}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    listEl.innerHTML += html;
+                });
+            } catch (err) {
+                console.error("加载错误:", err);
+                listEl.innerHTML = '';
+                statusEl.innerHTML = `
+                    <span class="text-danger">
+                        加载失败: ${err.message}. <br>
+                        请检查控制台(F12)或确认Supabase权限设置。
+                    </span>`;
+            }
+        }
+
+        // 2. 添加数据
+        async function addRecord() {
+            const shopInput = document.getElementById('shopName');
+            const priceInput = document.getElementById('price');
+            const statusEl = document.getElementById('statusMessage');
+
+            const shop = shopInput.value.trim();
+            const price = priceInput.value;
+
+            if (!shop || !price) {
+                alert("请填写完整信息！");
+                return;
+            }
+
+            try {
+                // 写入数据库
+                let { error } = await supabaseClient
+                    .from('coffee_records')
+                    .insert([{ shop_name: shop, price: price }]);
+
+                if (error) throw error;
+
+                // 清空输入框并刷新列表
+                shopInput.value = '';
+                priceInput.value = '';
+                statusEl.textContent = "记录成功！";
+                setTimeout(() => statusEl.textContent = "", 2000);
+                loadRecords();
+
+            } catch (err) {
+                console.error("添加错误:", err);
+                alert("保存失败: " + err.message);
+            }
+        }
+
+        // 页面加载完成后运行
+        window.onload = function() {
+            loadRecords();
+        };
+
+    </script>
+</body>
+</html>
