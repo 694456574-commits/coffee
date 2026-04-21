@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>☕ 我的咖啡记账本</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Supabase JS 客户端 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body { background-color: #f8f9fa; padding-bottom: 80px; }
+        .header { background-color: #6f4e37; color: white; padding: 15px; text-align: center; margin-bottom: 20px; border-radius: 0 0 15px 15px; }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 12px; }
+        .btn-custom { border-radius: 10px; font-weight: bold; }
+        /* 底部导航栏 */
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; }
+        .nav-item { text-align: center; font-size: 0.8rem; color: #666; cursor: pointer; flex: 1; transition: color 0.3s; }
+        .nav-item.active { color: #6f4e37; font-weight: bold; }
+        .nav-icon { font-size: 1.2rem; display: block; margin-bottom: 2px; }
+        /* 删除按钮样式 */
+        .delete-btn { cursor: pointer; color: #dc3545; font-size: 1.2rem; padding: 0 10px; transition: transform 0.2s; }
+        .delete-btn:hover { transform: scale(1.2); }
+        /* 家庭记录筛选按钮 */
+        .filter-buttons { display: flex; justify-content: center; gap: 5px; margin-bottom: 15px; }
+        .filter-btn { flex: 1; max-width: 120px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部标题 -->
+        <div class="header">
+            <h4>☕ 咖啡记账本</h4>
+        </div>
+        
+        <div class="container">
+            <!-- 1. 家庭咖啡支出 -->
+            <div v-show="currentTab === 'home'" class="section-view">
+                <div class="card p-3">
+                    <h5 class="card-title text-center mb-3">🏠 家庭咖啡支出</h5>
+                    <form @submit.prevent="addHomeRecord">
+                        <div class="mb-3">
+                            <label class="form-label">购买项目</label>
+                            <select v-model="homeForm.type" class="form-select" required>
+                                <option value="咖啡豆">咖啡豆</option>
+                                <option value="牛奶">牛奶</option>
+                                <option value="耗材">耗材 (滤纸/杯子等)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">金额 (¥)</label>
+                            <input v-model.number="homeForm.amount" type="number" class="form-control" step="0.1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">日期</label>
+                            <input v-model="homeForm.date" type="date" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 btn-custom">记一笔</button>
+                    </form>
+                </div>
+                <!-- 列表展示 -->
+                <div class="card p-3">
+                    <h6>最近记录</h6>
+                    <!-- 新增筛选按钮 -->
+                    <div class="filter-buttons">
+                        <button class="btn btn-sm btn-outline-secondary filter-btn" :class="{ active: selectedHomeFilter === '全部' }" @click="selectedHomeFilter = '全部'">全部</button>
+                        <button class="btn btn-sm btn-outline-info filter-btn" :class="{ active: selectedHomeFilter === '咖啡豆' }" @click="selectedHomeFilter = '咖啡豆'">咖啡豆</button>
+                        <button class="btn btn-sm btn-outline-light filter-btn" :class="{ active: selectedHomeFilter === '牛奶' }" @click="selectedHomeFilter = '牛奶'">牛奶</button>
+                        <button class="btn btn-sm btn-outline-secondary filter-btn" :class="{ active: selectedHomeFilter === '耗材' }" @click="selectedHomeFilter = '耗材'">耗材</button>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li v-for="item in filteredHomeRecords" :key="item.id" class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge bg-secondary me-2">{{ item.type }}</span>
+                                <small class="text-muted">{{ item.date }}</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="fw-bold me-3">¥{{ item.amount.toFixed(2) }}</span>
+                                <span class="delete-btn" @click="deleteRecord(item.id, 'home_coffee')">🗑️</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 2. 日常咖啡支出 -->
+            <div v-show="currentTab === 'daily'" class="section-view">
+                <div class="card p-3">
+                    <h5 class="card-title text-center mb-3">🥤 日常连锁咖啡</h5>
+                    <form @submit.prevent="addDailyRecord">
+                        <div class="mb-3">
+                            <label class="form-label">店铺/品牌</label>
+                            <input v-model="dailyForm.shop" type="text" class="form-control" placeholder="如：星巴克、瑞幸" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">金额 (¥)</label>
+                            <input v-model.number="dailyForm.amount" type="number" class="form-control" step="0.1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">日期</label>
+                            <input v-model="dailyForm.date" type="date" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning w-100 btn-custom text-white">记一笔</button>
+                    </form>
+                </div>
+                <div class="card p-3">
+                    <h6>最近记录</h6>
+                    <ul class="list-group list-group-flush">
+                        <li v-for="item in dailyRecords" :key="item.id" class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <!-- 根据店铺名称生成不同颜色的徽章 -->
+                                <span class="badge me-2" :style="{ backgroundColor: getShopColor(item.shop) }">{{ item.shop }}</span>
+                                <small class="text-muted">{{ item.date }}</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="fw-bold me-3">¥{{ item.amount.toFixed(2) }}</span>
+                                <span class="delete-btn" @click="deleteRecord(item.id, 'daily_coffee')">🗑️</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 3. 探店咖啡支出 -->
+            <div v-show="currentTab === 'explore'" class="section-view">
+                <div class="card p-3">
+                    <h5 class="card-title text-center mb-3">✈️ 探店咖啡支出</h5>
+                    <form @submit.prevent="addExploreRecord">
+                        <div class="mb-3">
+                            <label class="form-label">城市</label>
+                            <input v-model="exploreForm.city" type="text" class="form-control" placeholder="如：上海" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">店名</label>
+                            <input v-model="exploreForm.shop" type="text" class="form-control" placeholder="如：Manner" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">金额 (¥)</label>
+                            <input v-model.number="exploreForm.amount" type="number" class="form-control" step="0.1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">日期</label>
+                            <input v-model="exploreForm.date" type="date" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 btn-custom">记一笔</button>
+                    </form>
+                </div>
+                <div class="card p-3">
+                    <h6>最近记录</h6>
+                    <ul class="list-group list-group-flush">
+                        <li v-for="item in exploreRecords" :key="item.id" class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge bg-success me-2">{{ item.city }}</span>
+                                <small class="text-muted">{{ item.date }} {{ item.shop }}</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="fw-bold me-3">¥{{ item.amount.toFixed(2) }}</span>
+                                <span class="delete-btn" @click="deleteRecord(item.id, 'explore_coffee')">🗑️</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 4. 数据统计 -->
+            <div v-show="currentTab === 'stats'" class="section-view">
+                <div class="d-grid gap-3">
+                    <!-- 新增：总支出统计 -->
+                    <div class="card p-3 text-center">
+                        <h5>💰 总支出</h5>
+                        <p class="display-6 text-primary">¥{{ totalAllExpenditure.toFixed(2) }}</p>
+                        <p class="text-muted">家庭: ¥{{ homeTotal.toFixed(2) }} | 日常: ¥{{ dailyTotal.toFixed(2) }} | 探店: ¥{{ exploreTotal.toFixed(2) }}</p>
+                    </div>
+                    
+                    <div class="card p-3">
+                        <h5 class="text-center">📊 家庭支出占比</h5>
+                        <canvas id="chart-home"></canvas>
+                        <div class="text-center mt-2 fw-bold">总支出: ¥{{ homeTotal.toFixed(2) }}</div>
+                    </div>
+                    <div class="card p-3">
+                        <h5 class="text-center">📅 日常每月分布</h5>
+                        <canvas id="chart-daily"></canvas>
+                        <div class="text-center mt-2 fw-bold">总支出: ¥{{ dailyTotal.toFixed(2) }}</div>
+                    </div>
+                    <div class="card p-3">
+                        <h5 class="text-center">🌍 探店城市分布</h5>
+                        <canvas id="chart-explore-city"></canvas>
+                        <div class="text-center mt-2 fw-bold">总支出: ¥{{ exploreTotal.toFixed(2) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部导航栏 -->
+        <div class="bottom-nav">
+            <div class="nav-item" :class="{ active: currentTab === 'home' }" @click="currentTab = 'home'">
+                <span class="nav-icon">🏠</span> 家庭
+            </div>
+            <div class="nav-item" :class="{ active: currentTab === 'daily' }" @click="currentTab = 'daily'">
+                <span class="nav-icon">🥤</span> 日常
+            </div>
+            <div class="nav-item" :class="{ active: currentTab === 'explore' }" @click="currentTab = 'explore'">
+                <span class="nav-icon">✈️</span> 探店
+            </div>
+            <div class="nav-item" :class="{ active: currentTab === 'stats' }" @click="currentTab = 'stats'">
+                <span class="nav-icon">📊</span> 统计
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, computed, watch } = Vue;
+        const { createClient } = supabase;
+
+        // --- 数据库配置 ---
+        const SUPABASE_URL = 'https://vwrflrdfiengymrdhcap.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3cmZscmRmaWVuZ3ltcmRoY2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NzQ0MDYsImV4cCI6MjA5MjI1MDQwNn0.auVTDC2GrQOG8cK70oi6T0S5Z3Zzoj7Zb8UsDTJAXwM';
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        createApp({
+            setup() {
+                const currentTab = ref('home');
+                const rawHomeRecords = ref([]); // 存储原始数据库数据
+                const dailyRecords = ref([]);
+                const exploreRecords = ref([]);
+                
+                // 家庭记录筛选
+                const selectedHomeFilter = ref('全部'); // 默认显示全部
+                
+                // 表单数据
+                const today = new Date().toISOString().split('T')[0];
+                const homeForm = ref({ type: '咖啡豆', amount: 0, date: today });
+                const dailyForm = ref({ shop: '', amount: 0, date: today });
+                const exploreForm = ref({ city: '', shop: '', amount: 0, date: today });
+
+                // 修复：计算属性，将数据库原始数据转换为前端需要的格式
+                const processedHomeRecords = computed(() => {
+                    return rawHomeRecords.value.map(item => {
+                        let type = '未知';
+                        let amount = 0;
+                        if (item.milk_cost > 0) { type = '牛奶'; amount = item.milk_cost; }
+                        else if (item.bean_cost > 0) { type = '咖啡豆'; amount = item.bean_cost; }
+                        else if (item.supply_cost > 0) { type = '耗材'; amount = item.supply_cost; }
+                        return { ...item, type, amount };
+                    });
+                });
+
+                // 家庭记录筛选后的结果
+                const filteredHomeRecords = computed(() => {
+                    let records = [...processedHomeRecords.value]; // 创建副本以避免修改原数组
+                    records.sort((a, b) => new Date(b.date) - new Date(a.date)); // 按日期倒序排列
+                    
+                    if (selectedHomeFilter.value !== '全部') {
+                        records = records.filter(item => item.type === selectedHomeFilter.value);
+                    }
+                    return records;
+                });
+
+                // 统计总数 - 修复小数点问题
+                const homeTotal = computed(() => parseFloat(processedHomeRecords.value.reduce((sum, item) => sum + item.amount, 0).toFixed(2)));
+                const dailyTotal = computed(() => parseFloat(dailyRecords.value.reduce((sum, item) => sum + item.amount, 0).toFixed(2)));
+                const exploreTotal = computed(() => parseFloat(exploreRecords.value.reduce((sum, item) => sum + item.amount, 0).toFixed(2)));
+                const totalAllExpenditure = computed(() => homeTotal.value + dailyTotal.value + exploreTotal.value);
+
+                // 为不同店铺生成固定颜色
+                const shopColors = ref({});
+                const getColorPalette = () => ['#0d6efd', '#6f4e37', '#198754', '#ffc107', '#dc3545', '#20c997', '#6610f2', '#d63384', '#fd7e14', '#6f4e37'];
+                const getShopColor = (shopName) => {
+                    if (!shopColors.value[shopName]) {
+                        const existingColors = Object.values(shopColors.value);
+                        const palette = getColorPalette();
+                        const availableColors = palette.filter(color => !existingColors.includes(color));
+                        shopColors.value[shopName] = availableColors.length > 0 ? availableColors[0] : `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                    }
+                    return shopColors.value[shopName];
+                };
+
+                // 加载数据
+                const loadData = async () => {
+                    const [homeRes, dailyRes, exploreRes] = await Promise.all([
+                        supabaseClient.from('home_coffee').select('*'),
+                        supabaseClient.from('daily_coffee').select('*'),
+                        supabaseClient.from('explore_coffee').select('*')
+                    ]);
+                    if(homeRes.error) console.error('家庭表加载错误:', homeRes.error);
+                    if(dailyRes.error) console.error('日常表加载错误:', dailyRes.error);
+                    if(exploreRes.error) console.error('探店表加载错误:', exploreRes.error);
+                    
+                    if(homeRes.data) rawHomeRecords.value = homeRes.data;
+                    if(dailyRes.data) dailyRecords.value = dailyRes.data;
+                    if(exploreRes.data) exploreRecords.value = exploreRes.data;
+                };
+
+                // 保存数据
+                const saveData = async (record, table) => {
+                    const { error } = await supabaseClient.from(table).insert([record]);
+                    if (error) {
+                        console.error(`保存到 ${table} 失败:`, error);
+                        alert(`保存失败: ${error.message}`);
+                    } else {
+                        console.log(`${table} 保存成功`);
+                        loadData(); // 保存成功后重新加载数据以更新UI
+                    }
+                };
+
+                // 删除数据
+                const deleteRecord = async (id, table) => {
+                    if(!confirm('确定删除？')) return;
+                    const { error } = await supabaseClient.from(table).delete().eq('id', id);
+                    if (error) {
+                        console.error(`删除 ${table} 记录失败:`, error);
+                        alert('删除失败');
+                    } else {
+                        console.log(`${table} 删除成功`);
+                        loadData(); // 删除成功后重新加载数据以更新UI
+                    }
+                };
+
+                // 添加记录
+                const addHomeRecord = async () => {
+                    let record = {
+                        date: homeForm.value.date,
+                        milk_cost: 0,
+                        bean_cost: 0,
+                        supply_cost: 0
+                    };
+                    if (homeForm.value.type === '牛奶') record.milk_cost = homeForm.value.amount;
+                    else if (homeForm.value.type === '咖啡豆') record.bean_cost = homeForm.value.amount;
+                    else if (homeForm.value.type === '耗材') record.supply_cost = homeForm.value.amount;
+                    
+                    await saveData(record, 'home_coffee');
+                    homeForm.value.amount = 0;
+                };
+
+                const addDailyRecord = async () => {
+                    const record = {
+                        date: dailyForm.value.date,
+                        amount: dailyForm.value.amount,
+                        shop: dailyForm.value.shop
+                    };
+                    await saveData(record, 'daily_coffee');
+                    dailyForm.value.amount = 0;
+                    dailyForm.value.shop = '';
+                };
+
+                const addExploreRecord = async () => {
+                    const record = {
+                        date: exploreForm.value.date,
+                        amount: exploreForm.value.amount,
+                        city: exploreForm.value.city,
+                        shop: exploreForm.value.shop
+                    };
+                    await saveData(record, 'explore_coffee');
+                    exploreForm.value.amount = 0;
+                    exploreForm.value.city = '';
+                    exploreForm.value.shop = '';
+                };
+
+                // 渲染图表
+                const renderCharts = () => {
+                    setTimeout(() => {
+                        // 家庭饼图
+                        const ctxHome = document.getElementById('chart-home');
+                        if(ctxHome && ctxHome.getContext) {
+                            const data = processedHomeRecords.value;
+                            const milk = data.filter(i => i.type === '牛奶').reduce((s, i) => s + i.amount, 0);
+                            const bean = data.filter(i => i.type === '咖啡豆').reduce((s, i) => s + i.amount, 0);
+                            const supply = data.filter(i => i.type === '耗材').reduce((s, i) => s + i.amount, 0);
+                            new Chart(ctxHome.getContext('2d'), {
+                                type: 'pie',
+                                data: { labels: ['牛奶', '咖啡豆', '耗材'], datasets: [{ data: [milk, bean, supply], backgroundColor: ['#fff0f5', '#6f4e37', '#d3d3d3'] }] }
+                            });
+                        }
+                        
+                        // 日常柱状图（按月，按店铺分色）
+                        const ctxDaily = document.getElementById('chart-daily');
+                        if(ctxDaily && ctxDaily.getContext) {
+                            const monthlyData = {};
+                            dailyRecords.value.forEach(i => {
+                                const month = i.date.substring(0, 7);
+                                if (!monthlyData[month]) monthlyData[month] = {};
+                                if (!monthlyData[month][i.shop]) monthlyData[month][i.shop] = 0;
+                                monthlyData[month][i.shop] += i.amount;
+                            });
+
+                            const sortedMonths = Object.keys(monthlyData).sort();
+                            const allShops = [...new Set(dailyRecords.value.map(i => i.shop))];
+                            
+                            const datasets = allShops.map(shop => {
+                                return {
+                                    label: shop,
+                                    data: sortedMonths.map(m => monthlyData[m][shop] || 0),
+                                    backgroundColor: getShopColor(shop)
+                                };
+                            });
+
+                            new Chart(ctxDaily.getContext('2d'), {
+                                type: 'bar',
+                                data: { labels: sortedMonths, datasets }
+                            });
+                        }
+                        
+                        // 探店饼图
+                        const ctxCity = document.getElementById('chart-explore-city');
+                        if(ctxCity && ctxCity.getContext) {
+                            const stats = {};
+                            exploreRecords.value.forEach(i => {
+                                stats[i.city] = (stats[i.city] || 0) + i.amount;
+                            });
+                            new Chart(ctxCity.getContext('2d'), {
+                                type: 'doughnut',
+                                data: { labels: Object.keys(stats), datasets: [{ data: Object.values(stats), backgroundColor: ['#198754', '#0d6efd', '#dc3545'] }] }
+                            });
+                        }
+                    }, 100);
+                };
+
+                // 监听 Tab 切换，切换到统计页时重绘图表
+                watch(currentTab, (newTab) => {
+                    if (newTab === 'stats') renderCharts();
+                });
+
+                onMounted(() => {
+                    loadData();
+                });
+
+                return {
+                    currentTab,
+                    homeForm, dailyForm, exploreForm,
+                    processedHomeRecords, dailyRecords, exploreRecords,
+                    filteredHomeRecords, selectedHomeFilter, // 导出新的计算属性和状态
+                    homeTotal, dailyTotal, exploreTotal, totalAllExpenditure, // 包含总支出
+                    addHomeRecord, addDailyRecord, addExploreRecord,
+                    deleteRecord, getShopColor // 导出用于颜色的方法
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
